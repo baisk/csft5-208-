@@ -1,5 +1,6 @@
 From: baisk <buaagaowei@gmail.com>
-Subject: [PATCH] t/coreseek
+Subject: [PATCH] t/cs_fix
 
-start csft
+patch some fix on coreseek
+
 Signed-off-by: baisk <buaagaowei@gmail.com>
