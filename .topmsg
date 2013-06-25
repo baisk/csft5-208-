@@ -1,6 +1,6 @@
 From: baisk <buaagaowei@gmail.com>
-Subject: [PATCH] t/cs_fix
+Subject: [PATCH] t/cs_cache
 
-patch some fix on coreseek
+add query cache in sphinx
 
 Signed-off-by: baisk <buaagaowei@gmail.com>
