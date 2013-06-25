@@ -263,6 +263,7 @@ struct XQQuery_t : public ISphNoncopyable
 	XQNode_t *				m_pRoot;
 	bool					m_bSingleWord;
 
+	  bool                    m_bLoadFromCache; // by coreseek caching.
 	/// ctor
 	XQQuery_t ()
 	{

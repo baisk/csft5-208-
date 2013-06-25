@@ -1255,7 +1255,24 @@ static void xqDump ( XQNode_t * pNode, const CSphSchema & tSch, int iIndent )
 bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, int iStopwordStep )
 {
 	XQParser_t qp;
-	bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict, iStopwordStep );
+	//bool bRes = qp.Parse ( tParsed, sQuery, pTokenizer, pSchema, pDict, iStopwordStep );
+
+	//coreseek add cache conf
+	const char* sCurrentRawQuery = sQuery;
+	bool bCacheResult = false;
+	if(strncmp(sCurrentRawQuery, "\\cache:", 7) == 0) {
+        //gw
+        sCurrentRawQuery += 7;
+        bCacheResult = true;
+        printf("####################I got the query cache sig!###################### \n");
+    }
+    if(sCurrentRawQuery[0] == ' ') sCurrentRawQuery++;
+
+    tParsed.m_bLoadFromCache = bCacheResult;
+
+    //above parse self parse
+    bool bRes = qp.Parse ( tParsed, sCurrentRawQuery, pTokenizer, pSchema, pDict, iStopwordStep ); //i use next str to parse
+
 
 #ifndef NDEBUG
 	if ( bRes && tParsed.m_pRoot )

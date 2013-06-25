@@ -5134,11 +5134,15 @@ CSphQuery::CSphQuery ()
 
 	, m_eCollation		( SPH_COLLATION_DEFAULT )
 	, m_bAgent			( false )
+        , m_bLoadFromCache      ((bool*)malloc(sizeof(bool)))
+        // m_bLoadFromCache      ( false )
 {}
 
 
 CSphQuery::~CSphQuery ()
 {
+//gw to free the bool
+free(m_bLoadFromCache);
 }
 
 
@@ -14999,6 +15003,10 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		return false;
 	}
 
+	//gw; check if we need cache query
+	if (tParsed.m_bLoadFromCache) {printf("###use cache###\n" );}
+	*(pQuery->m_bLoadFromCache)=tParsed.m_bLoadFromCache;
+
 	// transform query if needed (quorum transform, keyword expansion, etc.)
 	sphTransformExtendedQuery ( &tParsed.m_pRoot );
 
@@ -15168,6 +15176,34 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	PROFILER_INIT ();
 	PROFILE_BEGIN ( query_init );
+
+	//gw:check if cached
+	bool need_cache = *(pQuery->m_bLoadFromCache);
+	if (need_cache){
+		printf("this query need cached\n");
+
+		//check if query is in redis
+		bool bCached = false;
+		//fixme: I need set redis connect as a lasting conn
+		redisContext *conn = redisConnect("127.0.0.1", 6379);
+		if (conn != NULL && conn->err) {
+            printf("Error: %s\n", conn->errstr);
+            // handle error
+        }//connect
+        redisReply *reply_t = (redisReply*) redisCommand(conn, "get cache");  //test hello world
+        if (reply_t && (reply_t->type == REDIS_REPLY_STRING) )
+        	printf("get cache is: %s\n", reply_t->str);
+        freeReplyObject(reply_t);
+        redisFree(conn);
+
+		if (bCached){
+			pResult->m_bResultFromCache=true;
+			return true;
+		}else{
+			pResult->m_bResultFromCache=false;
+			pResult->m_bCacheResult=true; //cache the io result
+		}
+	}
 
 	// non-ready index, empty response!
 	if ( !m_pPreread || !*m_pPreread )

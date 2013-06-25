@@ -32,6 +32,13 @@
 #include <limits.h>
 #include <locale.h>
 
+//gw
+#include <string>
+#include "md5.h" //may be useless
+#include <hiredis/hiredis.h>
+using std::string;
+using std::ifstream;
+
 #define SEARCHD_BACKLOG			5
 #define SPHINXAPI_PORT			9312
 #define SPHINXQL_PORT			9306
@@ -5035,6 +5042,15 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 
 void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
 {
+	//gw: check if pRes->m_bResultFromCache
+	if (pRes->m_bResultFromCache){ 
+		//read from redis and tOut.SendString()
+		return;
+	}
+	if (pResult->m_bCacheResult){
+		//if need cache result. then copy the tOut and store in redis
+	}
+
 	// status
 	if ( iVer>=0x10D )
 	{
@@ -8728,6 +8744,8 @@ public:
 
 		if ( tSettings.m_bHighlightQuery )
 		{
+			//gw
+			printf("In 8732 here searchd\n");
 			if ( !sphParseExtendedQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), m_pQueryTokenizer, &pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings().m_iStopwordStep ) )
 			{
 				sError = m_tExtQuery.m_sParseError;

@@ -2274,6 +2274,8 @@ public:
 
 	int				m_iSQLSelectStart;	///< SQL parser helper
 	int				m_iSQLSelectEnd;	///< SQL parser helper
+        
+        bool*			m_bLoadFromCache;       /// by coreseek caching.
 
 public:
 	int				m_iOldVersion;		///< version, to fixup old queries
@@ -2355,6 +2357,8 @@ public:
 	int						m_iCount;			///< count which will be actually served (computed from total, offset and limit)
 
 	int						m_iSuccesses;
+	bool 					m_bResultFromCache;  //from coreseek, add cache
+	bool 					m_bCacheResult;    //if from search, wheather need cache.
 
 public:
 							CSphQueryResult ();		///< ctor

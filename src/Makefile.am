@@ -3,8 +3,11 @@ SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp \
 	sphinxutils.cpp md5.cpp sphinxstd.cpp sphinxsort.cpp sphinxexpr.cpp sphinxfilter.cpp \
 	sphinxsearch.cpp sphinxrt.cpp
 
+SRC_MD5 = md5.cpp
+SRC_HIREDIS = hiredis/hiredis.c hiredis/async.c hiredis/dict.c  hiredis/net.c hiredis/sds.c
+
 noinst_LIBRARIES = libsphinx.a
-libsphinx_a_SOURCES = $(SRC_SPHINX)
+libsphinx_a_SOURCES = $(SRC_SPHINX) $(SRC_MD5) $(SRC_HIREDIS)
 
 bin_PROGRAMS = indexer searchd search spelldump indextool
 noinst_PROGRAMS = tests
