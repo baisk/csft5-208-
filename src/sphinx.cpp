@@ -34,6 +34,13 @@
 #include <math.h>
 #include <float.h>
 
+//gw
+#include <string>
+#include "md5.h" //may be useless
+#include <hiredis/hiredis.h>
+using std::string;
+using std::ifstream;
+
 #define SPH_UNPACK_BUFFER_SIZE	4096
 #define SPH_READ_PROGRESS_CHUNK (8192*1024)
 #define SPH_READ_NOPROGRESS_CHUNK (32768*1024)
@@ -15159,6 +15166,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	return bResult | bResultScan;
 }
 
+
+
 bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphVector<CSphFilterSettings> * pExtraFilters, CSphQueryNodeCache * pNodeCache, int iTag ) const
 {
 	assert ( pQuery );
@@ -15180,7 +15189,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	//gw:check if cached
 	bool need_cache = *(pQuery->m_bLoadFromCache);
 	if (need_cache){
-		printf("this query need cached\n");
+		printf("ParsedMultiQuery: this query need cached\n");
 
 		//check if query is in redis
 		bool bCached = false;
@@ -15190,9 +15199,12 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
             printf("Error: %s\n", conn->errstr);
             // handle error
         }//connect
-        redisReply *reply_t = (redisReply*) redisCommand(conn, "get cache");  //test hello world
-        if (reply_t && (reply_t->type == REDIS_REPLY_STRING) )
+        redisReply *reply_t = (redisReply*) redisCommand(conn, "get FOO");  //test hello world
+        if (reply_t && (reply_t->type == REDIS_REPLY_STRING) ){
         	printf("get cache is: %s\n", reply_t->str);
+        	bCached=true;
+        }
+        else{printf("no cache\n");}
         freeReplyObject(reply_t);
         redisFree(conn);
 

@@ -36,8 +36,10 @@
 #include <string>
 #include "md5.h" //may be useless
 #include <hiredis/hiredis.h>
+#include <sstream>
 using std::string;
 using std::ifstream;
+using std::stringstream;
 
 #define SEARCHD_BACKLOG			5
 #define SPHINXAPI_PORT			9312
@@ -2328,7 +2330,51 @@ protected:
 public:
 	bool							SendBytes ( const void * pBuf, int iLen );	///< (was) protected to avoid network-vs-host order bugs
 	template < typename T > bool	SendT ( T tValue );							///< (was) protected to avoid network-vs-host order bugs
+
 };
+
+class NetOutputBuffer_c_cache : public NetOutputBuffer_c
+{
+//add some new member for cache the buff
+public:
+	bool 		m_bCacheResult;   //if true, store the res in string
+	stringstream  	m_sCacheString;   //my own storage, use stringstream as storage
+	int 		m_iCacheLen;  //storage len
+public:
+	explicit	NetOutputBuffer_c_cache ( int iSock );
+	bool							SendBytes ( const void * pBuf, int iLen );	///< (was) protected to avoid network-vs-host order bugs
+	template < typename T > bool	SendT ( T tValue );							///< (was) protected to avoid network-vs-host order bugs
+
+
+};
+NetOutputBuffer_c_cache::NetOutputBuffer_c_cache ( int iSock )
+	: NetOutputBuffer_c(iSock)
+	, m_bCacheResult (false)
+	, m_iCacheLen (0)
+{
+	assert ( m_iSock>0 );
+}
+template < typename T > bool NetOutputBuffer_c_cache::SendT ( T tValue )
+{
+	// //gw
+	// if (m_bCacheResult){
+	// 	m_sCacheString.write((char*)tValue, sizeof(T));
+	// 	m_iCacheLen += sizeof(T);
+	// }
+	return NetOutputBuffer_c::SendT<T>( tValue );
+}
+bool NetOutputBuffer_c_cache::SendBytes ( const void * pBuf, int iLen )
+{
+
+	//gw
+	// if (m_bCacheResult){
+	// 	m_sCacheString.write( (char*)pBuf,iLen ); //write into my storage
+	// 	m_iCacheLen += iLen;
+	// }
+	return NetOutputBuffer_c::SendBytes(pBuf,iLen);
+}
+
+
 
 
 /// generic request buffer
@@ -2411,6 +2457,8 @@ NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
 	, m_bError ( false )
 	, m_iSent ( 0 )
 	, m_bFlushEnabled ( true )
+	// , m_bCacheResult (false)
+	// , m_iCacheLen (0)
 {
 	assert ( m_iSock>0 );
 }
@@ -2420,6 +2468,11 @@ template < typename T > bool NetOutputBuffer_c::SendT ( T tValue )
 {
 	if ( m_bError )
 		return false;
+	// //gw
+	// if (m_bCacheResult){
+	// 	m_sCacheString.write((char*)tValue, sizeof(T));
+	// 	m_iCacheLen += sizeof(T);
+	// }
 
 	FlushIf ( sizeof(T) );
 
@@ -2548,6 +2601,13 @@ bool NetOutputBuffer_c::SendMysqlString ( const char * sStr )
 
 bool NetOutputBuffer_c::SendBytes ( const void * pBuf, int iLen )
 {
+
+	// //gw
+	// if (m_bCacheResult){
+	// 	m_sCacheString.write( (char*)pBuf,iLen ); //write into my storage
+	// 	m_iCacheLen += iLen;
+	// }
+
 	BYTE * pMy = (BYTE*)pBuf;
 	while ( iLen>0 && !m_bError )
 	{
@@ -5040,17 +5100,35 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 }
 
 
-void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
+void SendResult ( int iVer, NetOutputBuffer_c_cache & tOut, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
 {
 	//gw: check if pRes->m_bResultFromCache
 	if (pRes->m_bResultFromCache){ 
 		//read from redis and tOut.SendString()
+		printf("I read from cache\n");
+		redisContext *conn = redisConnect("127.0.0.1", 6379);
+		if (conn != NULL && conn->err) {
+            printf("Error: %s\n", conn->errstr);
+            // handle error
+        }//connect
+		redisReply *reply_t = (redisReply*) redisCommand(conn, "get FOO");  //test hello world
+        if (reply_t && (reply_t->type == REDIS_REPLY_STRING) ){
+        	printf("get FOO is: %s\n", reply_t->str);
+        	tOut.SendBytes(reply_t->str, reply_t->len);
+        }
+        else{printf("no cache\n");}
+        freeReplyObject(reply_t);
+        redisFree(conn);
 		return;
 	}
-	if (pResult->m_bCacheResult){
+	if (pRes->m_bCacheResult){
 		//if need cache result. then copy the tOut and store in redis
+		printf("I need cache the result\n");
+		tOut.m_bCacheResult=true;
+		tOut.m_sCacheString.str(""); //clear the storage
 	}
 
+	//printf("now tout pos is: %d\n", tOut.);
 	// status
 	if ( iVer>=0x10D )
 	{
@@ -5236,6 +5314,23 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 		tOut.SendAsDword ( tStat.m_iHits );
 		if ( bExtendedStat )
 			tOut.SendByte ( tStat.m_bExpanded );
+	}
+
+	//gw
+	if (pRes->m_bCacheResult){
+		//if need cache result. then copy the tOut and store in redis
+		printf("#####cache over\n");
+		tOut.m_bCacheResult=false;
+		printf("cached data: %s\n; buf len: %d", (char*)tOut.m_sCacheString.str().c_str(), tOut.m_iCacheLen);
+
+		int tmplen=strlen((char*)tOut.m_sCacheString.str().c_str());
+
+		redisContext *conn = redisConnect("127.0.0.1", 6379);
+		redisReply * reply = (redisReply*)redisCommand(conn, "SET FOO %b", (char*)tOut.m_sCacheString.str().c_str(), tmplen);
+		freeReplyObject(reply);
+		redisFree(conn);
+
+		
 	}
 }
 
@@ -7351,7 +7446,7 @@ bool CheckCommandVersion ( int iVer, int iDaemonVersion, InputBuffer_c & tReq )
 void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int iSock, int iVer, int iMasterVer )
 {
 	// serve the response
-	NetOutputBuffer_c tOut ( iSock );
+	NetOutputBuffer_c_cache tOut ( iSock );
 	int iReplyLen = 0;
 	bool bExtendedStat = ( iMasterVer>0 );
 
@@ -7375,6 +7470,8 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendWord ( VER_COMMAND_SEARCH );
 		tOut.SendInt ( iReplyLen );
 
+		//gw
+		printf("send res by SendResult");
 		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bExtendedStat );
 
 	} else
