@@ -7507,8 +7507,39 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 	{
         ARRAY_FOREACH ( i, tHandler.m_dQueries ){
             //gw fix me.also cache the length
-            iReplyLen += 131; //magic for '\cache: Youtube'
-            //iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bExtendedStat );
+            //iReplyLen += 131; //magic for '\cache: Youtube'
+            redisContext *conn = redisConnect("127.0.0.1", 6379);
+            if (tHandler.m_dResults[i].m_bResultFromCache)
+            {
+                redisReply *reply_t = (redisReply*) redisCommand(conn, "get FOO_LEN");
+                if (reply_t && (reply_t->type == REDIS_REPLY_STRING) ){
+                            printf("get FOO_LEN is: %s\n", reply_t->str);
+                            //printf("@@@my cache len is: %d", reply_t->len);
+                            //tOut.SendBytes(reply_t->str, reply_t->len);
+                         }
+                stringstream tmp_read;
+                tmp_read << reply_t->str;
+                int tmp_int;
+                tmp_read >> tmp_int;
+                iReplyLen += tmp_int;
+
+                freeReplyObject(reply_t);
+            }else{
+
+                int len_tmp=  CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bExtendedStat );
+                iReplyLen += len_tmp;
+                if (tHandler.m_dResults[i].m_bCacheResult)
+                {
+                    redisReply *reply_t = (redisReply*) redisCommand(conn, "set FOO_LEN %d", len_tmp);
+                    freeReplyObject(reply_t);
+                }
+            }
+
+
+            redisFree(conn);
+
+
+
             printf("iReplyLen: %d\n", iReplyLen);
         }
 
