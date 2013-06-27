@@ -2331,6 +2331,10 @@ public:
 	bool							SendBytes ( const void * pBuf, int iLen );	///< (was) protected to avoid network-vs-host order bugs
 	template < typename T > bool	SendT ( T tValue );							///< (was) protected to avoid network-vs-host order bugs
 
+public:
+    bool 		m_bCacheResult;   //if true, store the res in string
+    stringstream  	m_sCacheString;   //my own storage, use stringstream as storage
+    int 		m_iCacheLen;  //storage len
 };
 
 class NetOutputBuffer_c_cache : public NetOutputBuffer_c
@@ -2356,21 +2360,25 @@ NetOutputBuffer_c_cache::NetOutputBuffer_c_cache ( int iSock )
 }
 template < typename T > bool NetOutputBuffer_c_cache::SendT ( T tValue )
 {
-	// //gw
-	// if (m_bCacheResult){
-	// 	m_sCacheString.write((char*)tValue, sizeof(T));
-	// 	m_iCacheLen += sizeof(T);
-	// }
+     //gw
+     //if (m_bCacheResult){
+    if(true){
+        m_sCacheString.write((char*)tValue, sizeof(T));
+        m_iCacheLen += sizeof(T);
+     }
+    printf("%d\n", tValue);
 	return NetOutputBuffer_c::SendT<T>( tValue );
 }
 bool NetOutputBuffer_c_cache::SendBytes ( const void * pBuf, int iLen )
 {
 
-	//gw
-	// if (m_bCacheResult){
-	// 	m_sCacheString.write( (char*)pBuf,iLen ); //write into my storage
-	// 	m_iCacheLen += iLen;
-	// }
+    //gw
+    // if (m_bCacheResult){
+    if (true){
+        m_sCacheString.write( (char*)pBuf,iLen ); //write into my storage
+        m_iCacheLen += iLen;
+     }
+    printf("%s\n",pBuf);
 	return NetOutputBuffer_c::SendBytes(pBuf,iLen);
 }
 
@@ -2411,6 +2419,9 @@ protected:
 	void						SetError ( bool bError ) { m_bError = bError; }
 	bool						GetBytes ( void * pBuf, int iLen );
 	template < typename T > T	GetT ();
+
+public:
+
 };
 
 
@@ -2457,8 +2468,9 @@ NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
 	, m_bError ( false )
 	, m_iSent ( 0 )
 	, m_bFlushEnabled ( true )
-	// , m_bCacheResult (false)
-	// , m_iCacheLen (0)
+     , m_bCacheResult (false)
+     , m_iCacheLen (0)
+    //, m_sCacheString()
 {
 	assert ( m_iSock>0 );
 }
@@ -2468,11 +2480,15 @@ template < typename T > bool NetOutputBuffer_c::SendT ( T tValue )
 {
 	if ( m_bError )
 		return false;
-	// //gw
-	// if (m_bCacheResult){
-	// 	m_sCacheString.write((char*)tValue, sizeof(T));
-	// 	m_iCacheLen += sizeof(T);
-	// }
+    printf("in sendT\n");
+     //gw
+     if (m_bCacheResult){
+    //if(true){
+        //m_sCacheString.write((char*)tValue, sizeof(T));
+
+         m_sCacheString.write((char*)(&tValue),sizeof(T)) ;
+        m_iCacheLen += sizeof(T);
+     }
 
 	FlushIf ( sizeof(T) );
 
@@ -2602,11 +2618,13 @@ bool NetOutputBuffer_c::SendMysqlString ( const char * sStr )
 bool NetOutputBuffer_c::SendBytes ( const void * pBuf, int iLen )
 {
 
-	// //gw
-	// if (m_bCacheResult){
-	// 	m_sCacheString.write( (char*)pBuf,iLen ); //write into my storage
-	// 	m_iCacheLen += iLen;
-	// }
+     //gw
+    printf("in sendBytes\n");
+     if (m_bCacheResult){
+    //if(true){
+        m_sCacheString.write( (char*)pBuf,iLen ); //write into my storage
+        m_iCacheLen += iLen;
+     }
 
 	BYTE * pMy = (BYTE*)pBuf;
 	while ( iLen>0 && !m_bError )
@@ -5100,33 +5118,35 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphVector<
 }
 
 
-void SendResult ( int iVer, NetOutputBuffer_c_cache & tOut, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
+void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pRes, const CSphVector<PoolPtrs_t> & dTag2Pools, bool bExtendedStat )
 {
 	//gw: check if pRes->m_bResultFromCache
-	if (pRes->m_bResultFromCache){ 
-		//read from redis and tOut.SendString()
-		printf("I read from cache\n");
-		redisContext *conn = redisConnect("127.0.0.1", 6379);
-		if (conn != NULL && conn->err) {
-            printf("Error: %s\n", conn->errstr);
-            // handle error
-        }//connect
-		redisReply *reply_t = (redisReply*) redisCommand(conn, "get FOO");  //test hello world
-        if (reply_t && (reply_t->type == REDIS_REPLY_STRING) ){
-        	printf("get FOO is: %s\n", reply_t->str);
-        	tOut.SendBytes(reply_t->str, reply_t->len);
-        }
-        else{printf("no cache\n");}
-        freeReplyObject(reply_t);
-        redisFree(conn);
-		return;
-	}
-	if (pRes->m_bCacheResult){
-		//if need cache result. then copy the tOut and store in redis
-		printf("I need cache the result\n");
-		tOut.m_bCacheResult=true;
-		tOut.m_sCacheString.str(""); //clear the storage
-	}
+     if (pRes->m_bResultFromCache){
+        //read from redis and tOut.SendString()
+        printf("I read from cache\n");
+        redisContext *conn = redisConnect("127.0.0.1", 6379);
+        if (conn != NULL && conn->err) {
+             printf("Error: %s\n", conn->errstr);
+             // handle error
+         }//connect
+        redisReply *reply_t = (redisReply*) redisCommand(conn, "get FOO");  //test hello world
+         if (reply_t && (reply_t->type == REDIS_REPLY_STRING) ){
+            printf("get FOO is: %s\n", reply_t->str);
+            printf("@@@my cache len is: %d", reply_t->len);
+            tOut.SendBytes(reply_t->str, reply_t->len);
+         }
+         else{printf("no cache\n");}
+         freeReplyObject(reply_t);
+         redisFree(conn);
+        return;
+     }
+     if (pRes->m_bCacheResult){
+        //if need cache result. then copy the tOut and store in redis
+        printf("I need cache the result\n");
+        tOut.m_bCacheResult=true;
+        tOut.m_sCacheString.str(""); //clear the storage
+     }
+
 
 	//printf("now tout pos is: %d\n", tOut.);
 	// status
@@ -5316,22 +5336,31 @@ void SendResult ( int iVer, NetOutputBuffer_c_cache & tOut, const CSphQueryResul
 			tOut.SendByte ( tStat.m_bExpanded );
 	}
 
-	//gw
-	if (pRes->m_bCacheResult){
-		//if need cache result. then copy the tOut and store in redis
-		printf("#####cache over\n");
-		tOut.m_bCacheResult=false;
-		printf("cached data: %s\n; buf len: %d", (char*)tOut.m_sCacheString.str().c_str(), tOut.m_iCacheLen);
+	// //gw
+    printf("result len: %d\n", tOut.m_iCacheLen);
+    printf("cache: %s \n", tOut.m_sCacheString.str().c_str());
+     if (pRes->m_bCacheResult){
+        //if need cache result. then copy the tOut and store in redis
+        printf("#####cache over\n");
+        tOut.m_bCacheResult=false;
 
-		int tmplen=strlen((char*)tOut.m_sCacheString.str().c_str());
+        char write_buf[500];
+        tOut.m_sCacheString.read(write_buf,tOut.m_iCacheLen);
+        write_buf[tOut.m_iCacheLen]=0;
 
-		redisContext *conn = redisConnect("127.0.0.1", 6379);
-		redisReply * reply = (redisReply*)redisCommand(conn, "SET FOO %b", (char*)tOut.m_sCacheString.str().c_str(), tmplen);
-		freeReplyObject(reply);
-		redisFree(conn);
+        printf("cached data: %s\n; buf len: %d", write_buf, tOut.m_iCacheLen);
 
-		
-	}
+        //int tmplen=strlen((char*)tOut.m_sCacheString.str().c_str());
+        int tmplen = tOut.m_iCacheLen;
+
+        redisContext *conn = redisConnect("127.0.0.1", 6379);
+        //redisReply * reply = (redisReply*)redisCommand(conn, "SET FOO %b", (unsigned char*)tOut.m_sCacheString.str().c_str(), tmplen);
+        redisReply * reply = (redisReply*)redisCommand(conn, "SET FOO %b", write_buf, tmplen);
+        freeReplyObject(reply);
+        redisFree(conn);
+
+
+     }
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -7446,7 +7475,7 @@ bool CheckCommandVersion ( int iVer, int iDaemonVersion, InputBuffer_c & tReq )
 void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int iSock, int iVer, int iMasterVer )
 {
 	// serve the response
-	NetOutputBuffer_c_cache tOut ( iSock );
+    NetOutputBuffer_c tOut ( iSock );
 	int iReplyLen = 0;
 	bool bExtendedStat = ( iMasterVer>0 );
 
@@ -7471,21 +7500,29 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 		tOut.SendInt ( iReplyLen );
 
 		//gw
-		printf("send res by SendResult");
+		printf("send res by iVer<=0x10C");
 		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bExtendedStat );
 
 	} else
 	{
-		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bExtendedStat );
+        ARRAY_FOREACH ( i, tHandler.m_dQueries ){
+            //gw fix me.also cache the length
+            iReplyLen += 131; //magic for '\cache: Youtube'
+            //iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bExtendedStat );
+            printf("iReplyLen: %d\n", iReplyLen);
+        }
 
 		// send it
 		tOut.SendWord ( (WORD)SEARCHD_OK );
 		tOut.SendWord ( VER_COMMAND_SEARCH );
 		tOut.SendInt ( iReplyLen );
 
-		ARRAY_FOREACH ( i, tHandler.m_dQueries )
+		//gw
+		printf("send res by iVer>0x10C");
+		ARRAY_FOREACH ( i, tHandler.m_dQueries ){
+            printf("every %d time to call SendResult\n", i);
 			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bExtendedStat );
+		}
 	}
 
 	tOut.Flush ();

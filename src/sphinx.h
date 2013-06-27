@@ -2359,6 +2359,7 @@ public:
 	int						m_iSuccesses;
 	bool 					m_bResultFromCache;  //from coreseek, add cache
 	bool 					m_bCacheResult;    //if from search, wheather need cache.
+	long 					m_lMD5;			
 
 public:
 							CSphQueryResult ();		///< ctor
